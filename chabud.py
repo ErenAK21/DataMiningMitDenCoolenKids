@@ -12,7 +12,6 @@
 import logging
 import os
 from pathlib import Path
-
 import pandas as pd
 import albumentations as A
 import albumentations.pytorch.transforms as Atorch
@@ -29,9 +28,8 @@ fn = Path("A:/CodingProjekte/DataMining/src/train_eval.hdf5")
 
 #Wir wollen ein Dataframe erstellen, welches nur die Namen der Datensätze enthält, die eine größere Brandfläche als 2% haben.
 #Sogesehen ist es dann eine whitelist
-def wl():
-    whitelist = []
 
+def basic_df():
     res = []
     #Anzahl aller Datensätze ("name")
     count_ds = 0
@@ -54,12 +52,61 @@ def wl():
                 pre_miss = 1
             res.append({"name": name, "pre_missing": pre_miss, "burnt_pixel_abs": count_burnt_pixels, "burnt_pixel_rel": burnt_pixel_rel})
 
-        df = pd.DataFrame(res)
-        for index, row in df.iterrows():
-            if row["burnt_pixel_rel"] < 0.005:
-                continue
-            whitelist.append(row["name"])
+        return pd.DataFrame(res)
 
+def miss_dp_df():
+    BANDS = ["coastal_aerosol", "blue", "green", "red",
+             "veg_red_1", "veg_red_2", "veg_red_3", "nir",
+             "veg_red_4", "water_vapour", "swir_1", "swir_2"]
+
+    res = basic_df().values
+
+    # miss_dp ist eine Liste mit "name", "pre" "post" (Werte von Pre + Postt werden mit den Bandnamen selektiert)
+    miss_count = 0
+    miss_dp = []
+    with h5py.File(fn, "r") as fd:
+        for x in res:
+            # skippe die Datensätze mit fehlendem Pre-Bild
+            # if x["pre_missing"] == 1:
+            #     continue
+            pre_miss = False
+
+            # Laden der Daten aus dem Originaldatensatz
+            name = x["name"]
+            ds = to_xarray(fd[name])
+            pre = ds["pre"][...]
+            post = ds["post"][...]
+            mask = ds["mask"][...]
+
+            if x["pre_missing"] == 1:
+                # Code für den Fall, dass 'pre_missing' gleich 1 ist
+                post_miss = []
+                for band in range(pre.shape[2]):
+                    post_miss.append((np.sum(post[band] == 0).values))
+                x_post_miss = xr.DataArray(post_miss, dims=["band"], coords={"band": BANDS})
+                miss_dp.append({"name": name, "pre": [], "post": x_post_miss.values})
+            else:
+                # Code für den Fall, dass 'pre_missing' nicht gleich 1 ist
+                pre_miss = []
+                post_miss = []
+                for band in range(pre.shape[2]):
+                    pre_miss.append((np.sum(pre[band] == 0).values))
+                    post_miss.append((np.sum(post[band] == 0).values))
+                x_pre_miss = xr.DataArray(pre_miss, dims=["band"], coords={"band": BANDS})
+                x_post_miss = xr.DataArray(post_miss, dims=["band"], coords={"band": BANDS})
+                miss_dp.append({"name": name, "pre": x_pre_miss.values, "post": x_post_miss.values})
+
+    return miss_dp
+
+
+def wl():
+    whitelist = []
+    df = basic_df()
+
+    for index, row in df.iterrows():
+        if row["burnt_pixel_rel"] < 0.0025:
+            continue
+        whitelist.append(row["name"])
     return whitelist
 
 checkpoint_callback = ModelCheckpoint(
@@ -601,7 +648,7 @@ def main(accelerator,
                     lr=learning_rate)
 
     trainer = pl.Trainer(accelerator=accelerator, devices="auto",
-                         log_every_n_steps=10, max_epochs=15, callbacks=[checkpoint_callback])
+                         log_every_n_steps=10, max_epochs=30, callbacks=[checkpoint_callback])
 #callbacks=[checkpoint_callback]
     logger.info("Start training.")
     trainer.fit(mdl)

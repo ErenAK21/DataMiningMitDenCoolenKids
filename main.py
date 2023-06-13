@@ -9,9 +9,11 @@ if __name__ == '__main__':
     print(ch.__version__)
     print(torch.cuda.is_available())
     # See PyCharm help at https://www.jetbrains.com/help/pycharm/
-
     channels = ["band_1", "band_2", "band_3", "band_4", "band_5", "band_6", "band_7", "band_8", "band_8a", "band_9",
-                "band_11", "band_12", "nbr", "ndmi", "ndvi", "bsi", "ndwi"]
+                "band_11", "band_12", "nbr", "ndvi", "gndvi", "evi", "avi", "savi", "ndmi", "msi", "gci", "bsi", "ndwi",
+                "ndgi"]
+    # channels = ["band_1", "band_2", "band_3", "band_4", "band_5", "band_6", "band_7", "band_8", "band_8a", "band_9",
+    #             "band_11", "band_12", "nbr", "ndmi", "ndvi", "bsi", "ndwi"]
     channels_fun = []
 
     for channel in channels:
